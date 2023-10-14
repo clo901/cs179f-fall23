@@ -6,7 +6,7 @@
 char*
 fmtname(char *path)
 {
-  static char buf[DIRSIZ+1];
+  //static char buf[DIRSIZ+1];
   char *p;
 
   // Find first character after last slash.
@@ -50,45 +50,52 @@ void find(char *path, char* filename)
     return;
   }
 
-  switch(st.type){
-  case T_FILE:
-    printf("%s %d %d %l\n", fmtname(path), st.type, st.ino, st.size);
-    break;
-
-  case T_DIR:
-    if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
-      printf("ls: path too long\n");
-      break;
-    }
-    strcpy(buf, path);
-    p = buf+strlen(buf);
-    *p++ = '/';
-    while(read(fd, &de, sizeof(de)) == sizeof(de)){
-      if(de.inum == 0)
-        continue;
-      memmove(p, de.name, DIRSIZ);
-      p[DIRSIZ] = 0;
-      if(stat(buf, &st) < 0){
-        printf("ls: cannot stat %s\n", buf);
-        continue;
-      }
-      printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
-    }
-    break;
+  if(st.type != T_DIR)
+  {
+        close(fd);
+        return;
   }
+
+  if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf)
+  {
+        printf("find: path too long\n");
+        close(fd);
+        return;
+  }
+
+  strcpy(buf, path);
+  p = buf+strlen(buf);
+  *p++ = '/';
+  while (read(fd, &de, sizeof(de)) == sizeof(de))
+  {
+        if(de.inum == 0)
+        {
+                continue;
+        }
+
+        memmove(p, de.name, DIRSIZ);
+        p[DIRSIZ] = 0;
+
+        if(!strcmp(de.name, ".") || !strcmp(de.name, ".."))
+        {
+                continue;
+        }
+
+        find(buf, filename);
+   }
+
   close(fd);
 }
 
 int
 main(int argc, char *argv[])
 {
-  int i;
 
   if(argc < 2){
-    ls(".");
+    printf("Usage: find path filename\n");
     exit();
   }
-  for(i=1; i<argc; i++)
-    ls(argv[i]);
+
+  find(argv[1], argv[2]);
   exit();
 }

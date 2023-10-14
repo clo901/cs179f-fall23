@@ -25,21 +25,27 @@ fmtname(char *path)
 }
 
 
-void
-ls(char *path)
+void find(char *path, char* filename)
 {
   char buf[512], *p;
   int fd;
   struct dirent de;
   struct stat st;
 
-  if((fd = open(path, 0)) < 0){
-    fprintf(2, "ls: cannot open %s\n", path);
-    return;
+  if(!strcmp(fmtname(path), filename))
+  {
+        printf("%s\n", path);
   }
 
-  if(fstat(fd, &st) < 0){
-    fprintf(2, "ls: cannot stat %s\n", path);
+  if((fd = open(path, 0)) < 0)
+   {
+         fprintf(2, "find: cannot open %s\n", path, fd);
+         return; 
+   }
+
+  if(fstat(fd, &st) < 0)
+  {
+    fprintf(2, "find: cannot stat %s\n", path);
     close(fd);
     return;
   }

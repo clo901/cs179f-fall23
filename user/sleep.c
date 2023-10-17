@@ -17,10 +17,7 @@ main(int argc, char *argv[])
     n = atoi(argv[i]);
     printf("sleep: sleeping for %d ticks\n", n);
     sleep(n);
-  }
-
-  for(i = 1; i < argc; i++)
-    {
+   
     if(unlink(argv[i]) < 0)
     {
       printf("rm: %s failed to delete\n", argv[i]);

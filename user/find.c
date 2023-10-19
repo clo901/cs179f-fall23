@@ -37,7 +37,7 @@ void find(char *path, char* filename)
         printf("%s\n", path);
   }
 
-  if((fd = open(path, 0)) < 0)
+   if((fd = open(path, 0)) < 0)
    {
          fprintf(2, "find: cannot open %s\n", path, fd);
          return; 

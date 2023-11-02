@@ -53,7 +53,7 @@ test0() {
 }
 
 
-/*
+
 // Allocate all free memory and count how it is
 void test1()
 {
@@ -109,6 +109,6 @@ int
 main(int argc, char *argv[])
 {
   test0();
-  //test1();
+  test1();
   exit(0);
 }

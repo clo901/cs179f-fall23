@@ -1,0 +1,424 @@
+diff --git a/kernel/buddy.c b/kernel/buddy.c
+index 9655483..f763682 100644
+--- a/kernel/buddy.c
++++ b/kernel/buddy.c
+@@ -43,7 +43,8 @@ int bit_isset(char *array, int index) {
+ }
+
+ // Set bit at position index in array to 1
+-void bit_set(char *array, int index) {
++void bit_set(char *array, int index) 
++{ 
+   char b = array[index/8];
+   char m = (1 << (index % 8));
+   array[index/8] = (b | m);
+diff --git a/kernel/exec.c b/kernel/exec.c
+index 614f7ca..a9a03bd 100644
+--- a/kernel/exec.c
++++ b/kernel/exec.c
+@@ -70,7 +70,7 @@ exec(char *path, char **argv)
+     goto bad;
+   uvmclear(pagetable, sz-2*PGSIZE);
+   sp = sz;
+-  stackbase = sp - PGSIZE;
++  stackbase = sp - PGSIZE; 
+
+   // Push argument strings, prepare rest of stack in ustack.
+   for(argc = 0; argv[argc]; argc++) {
+diff --git a/kernel/file.c b/kernel/file.c
+index e8dcf17..1f9cb7c 100644
+--- a/kernel/file.c
++++ b/kernel/file.c
+@@ -16,7 +16,7 @@
+ struct devsw devsw[NDEV];
+ struct {
+   struct spinlock lock;
+-  struct file file[NFILE];
++// struct file file[NFILE];
+ } ftable;
+
+ void
+@@ -25,22 +25,26 @@ fileinit(void)
+   initlock(&ftable.lock, "ftable");
+ }
+-// Allocate a file structure.
++// Allocate a file structure. 
+ struct file*
+ filealloc(void)
+ {
+   struct file *f;
+
+   acquire(&ftable.lock);
+-  for(f = ftable.file; f < ftable.file + NFILE; f++){
+-    if(f->ref == 0){
++    // for(f = ftable.file; f < ftable.file + NFILE; f++){
++    // if(f->ref == 0){
++      f = bd_malloc(sizeof(struct file));
++      if(f){
++      memset(f, 0, sizeof(struct file));
+       f->ref = 1;
+       release(&ftable.lock);
+       return f;
+-    }
+-  }
+
+-  release(&ftable.lock);
+-  return 0;
++      }
++    // }
++    // }
++     release(&ftable.lock);
++     return 0;
+ }
+
+ // Increment ref count for file f.
+@@ -72,7 +76,7 @@ fileclose(struct file *f)
+   f->ref = 0;
+   f->type = FD_NONE;
+   release(&ftable.lock);
+-
++  
+   if(ff.type == FD_PIPE){
+     pipeclose(ff.pipe, ff.writable);
+   } else if(ff.type == FD_INODE || ff.type == FD_DEVICE){
+@@ -80,6 +84,8 @@ fileclose(struct file *f)
+     iput(ff.ip);
+     end_op(ff.ip->dev);
+   }
++
++   bd_free(f);
+ }
+
+ // Get metadata about file f.
+@@ -114,6 +120,8 @@ fileread(struct file *f, uint64 addr, int n)
+   if(f->type == FD_PIPE){
+     r = piperead(f->pipe, addr, n);
+   } else if(f->type == FD_DEVICE){
++    if(f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
++      return -1;
+     r = devsw[f->major].read(1, addr, n);
+   } else if(f->type == FD_INODE){
+     ilock(f->ip);
+@@ -140,6 +148,8 @@ filewrite(struct file *f, uint64 addr, int n)
+if(f->type == FD_PIPE){
+     ret = pipewrite(f->pipe, addr, n);
+   } else if(f->type == FD_DEVICE){
++    if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)
++      return -1;
+     ret = devsw[f->major].write(1, addr, n);
+   } else if(f->type == FD_INODE){
+     // write a few blocks at a time to avoid exceeding
+@@ -175,4 +185,3 @@ filewrite(struct file *f, uint64 addr, int n)
+
+   return ret;
+ }
+-
+diff --git a/kernel/proc.c b/kernel/proc.c
+index 78351fc..88f6e52 100644
+--- a/kernel/proc.c
++++ b/kernel/proc.c
+@@ -23,6 +23,7 @@ static void wakeup1(struct proc *chan);
+
+ extern char trampoline[]; // trampoline.S
+ +
+ void
+ procinit(void)
+ {
+diff --git a/kernel/proc.h b/kernel/proc.h
+index 538b48a..1e175e2 100644
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -1,3 +1,5 @@
++#ifndef _PROC_H_
++#define _PROC_H_
+ // Saved registers for kernel context switches.
+ struct context {
+   uint64 ra;
+@@ -84,7 +86,7 @@ enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+
+ // Per-process state
+ struct proc {
+-  struct spinlock lock;
++ struct spinlock lock;
+
+   // p->lock must be held when using these:
+   enum procstate state;        // Process state
+@@ -104,3 +106,4 @@ struct proc {
+   struct inode *cwd;           // Current directory
+   char name[16];               // Process name (debugging)
+ };
++#endif
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index e8bcda9..d365ee0 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -45,10 +45,18 @@ sys_sbrk(void)
+   int n;
+
+   if(argint(0, &n) < 0)
++  {
+     return -1;
++  }
+ addr = myproc()->sz;
+-  if(growproc(n) < 0)
+-    return -1;
++  myproc()->sz+=n;
++ if(n < 0)
++{
++       uvmdealloc(myproc()->pagetable, addr, myproc()->sz);
++}
++
++// if(growproc(n) < 0)
++  //  return -1;
+   return addr;
+ }
+
+diff --git a/kernel/trap.c b/kernel/trap.c
+index 51a7805..bd86d27 100644
+--- a/kernel/trap.c
++++ b/kernel/trap.c
+@@ -32,7 +32,34 @@ trapinithart(void)
+ //
+ // handle an interrupt, exception, or system call from user space.
+ // called from trampoline.S
+-//
++
++int handle_page_fault(struct proc* p, uint64 addr) 
++{
++  if (addr >= p->sz) 
++       {
++               return -1;
++       }
++
++  uint64 page_addr = PGROUNDDOWN(addr);
++  char *mem = kalloc();
++ 
++ if (mem == 0)
++       {
++                return -1;
++       }
++
+ memset(mem, 0, PGSIZE);
++ 
++ if(mappages(p->pagetable, page_addr, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0)
++{
++    kfree(mem);
++    return -1;
++  }
++
++return 0;
++}
++
++
+ void
+ usertrap(void)
+ {
+@@ -67,7 +94,15 @@ usertrap(void)
+     syscall();
+   } else if((which_dev = devintr()) != 0){
+     // ok
+-  } else {
++else if(r_scause() == 13 || r_scause() == 15)
++{
++       if(handle_page_fault(p, r_stval()) == 1)
++       {
++               p-> killed = 1;
++       }
++}
++else {
+     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+     p->killed = 1;
+diff --git a/kernel/vm.c b/kernel/vm.c
+index 2b99c8b..8625154 100644
+--- a/kernel/vm.c
++++ b/kernel/vm.c
+@@ -5,7 +5,8 @@
+ #include "riscv.h"
+ #include "defs.h"
+ #include "fs.h"
+-
++#include "proc.h"
++#include "spinlock.h"
+ /*
+  * the kernel's page table.
+  */
+@@ -103,14 +104,24 @@ walkaddr(pagetable_t pagetable, uint64 va)
+ {
+   pte_t *pte;
+   uint64 pa;
++       
++  if(va >= MAXVA)
++  {
++       return 0;
++  }  
+
+   pte = walk(pagetable, va, 0);
+-  if(pte == 0)
++
++ if(pte == 0 )
++ {
+     return 0;
++  }
++
+   if((*pte & PTE_V) == 0)
+     return 0;
+   if((*pte & PTE_U) == 0)
+     return 0;
++
+   pa = PTE2PA(*pte);
+   return pa;
+ }
+@@ -125,6 +136,7 @@ kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)
+     panic("kvmmap");
+ }
+
++
+ // translate a kernel virtual address to
+ // a physical address. only needed for
+ // addresses on the stack.
+@@ -177,30 +189,37 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+ void
+uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
+ {
+-  uint64 a, last;
++  uint64 a;
+   pte_t *pte;
+-  uint64 pa;
+
+-  a = PGROUNDDOWN(va);
+-  last = PGROUNDDOWN(va + size - 1);
+-  for(;;){
++  if((va % PGSIZE) != 0)
++  {
++    panic("uvmunmap: not aligned");
++  }
++
++  for(a = va; a < va + size*PGSIZE; a += PGSIZE)
++  {
+     if((pte = walk(pagetable, a, 0)) == 0)
+-      panic("uvmunmap: walk");
++    {
+  continue;
++    }
++
+     if((*pte & PTE_V) == 0){
+-      printf("va=%p pte=%p\n", a, *pte);
+-      panic("uvmunmap: not mapped");
++      continue;
+     }
++   
+     if(PTE_FLAGS(*pte) == PTE_V)
++    {
+       panic("uvmunmap: not a leaf");
+-    if(do_free){
+-      pa = PTE2PA(*pte);
+-      kfree((void*)pa);
+     }
+-    *pte = 0;
+-    if(a == last)
+break;
+-    a += PGSIZE;
+-    pa += PGSIZE;
++    
++     if(do_free)
++     {
++      uint64 pa = PTE2PA(*pte);
++      kfree((void*)pa);
++     }
++   
++     *pte = 0;
+   }
+ }
+
+@@ -319,9 +338,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+
+   for(i = 0; i < sz; i += PGSIZE){
+     if((pte = walk(old, i, 0)) == 0)
+-      panic("uvmcopy: pte should exist");
++      continue;
+     if((*pte & PTE_V) == 0)
+-      panic("uvmcopy: page not present");
++      continue;
+     pa = PTE2PA(*pte);
+     flags = PTE_FLAGS(*pte);
+     if((mem = kalloc()) == 0)
+@@ -363,13 +382,19 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
+   while(len > 0){
+     va0 = (uint)PGROUNDDOWN(dstva);
+     pa0 = walkaddr(pagetable, va0);
++   
+     if(pa0 == 0)
+-      return -1;
++    {
++       return -1; 
++    }
++
+     n = PGSIZE - (dstva - va0);
+     if(n > len)
++    {
+       n = len;
+       +    }
++   
+     memmove((void *)(pa0 + (dstva - va0)), src, n);
+-
+     len -= n;
+     src += n;
+     dstva = va0 + PGSIZE;
+@@ -389,10 +414,14 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
+     va0 = (uint)PGROUNDDOWN(srcva);
+     pa0 = walkaddr(pagetable, va0);
+     if(pa0 == 0)
+-      return -1;
++    {
++       return -1;
++    }
+     n = PGSIZE - (srcva - va0);
+     if(n > len)
++    {
+       n = len;
++    }
+     memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+
+     len -= n;
+diff --git a/user/alloctest.c b/user/alloctest.c
+index 6b6b063..9f77fab 100644
+--- a/user/alloctest.c
++++ b/user/alloctest.c
+@@ -53,7 +53,7 @@ test0() {
+ }
+
+
+-/*
++
+ // Allocate all free memory and count how it is
+ void test1()
+ {
+@@ -94,8 +94,8 @@ void test1()
+         tot += 1;
+       }
+   }
+-  //int n = (PHYSTOP-KERNBASE)/PGSIZE;
+-  //printf("allocated %d out of %d pages\n", tot, n);
++  int n = (PHYSTOP-KERNBASE)/PGSIZE;
++  printf("allocated %d out of %d pages\n", tot, n);
+   if(tot < 31950) {
+     printf("expected to allocate at least 31950, only got %d\n", tot);
+     printf("memtest: FAILED\n");
+@@ -103,12 +103,12 @@ void test1()
+     printf("memtest: OK\n");
+   }
+ }
+-*/
++
+
+ int
+ main(int argc, char *argv[])
+ {
+   test0();
+-  //test1();
++  test1();
+   exit(0);
+ }
+
+

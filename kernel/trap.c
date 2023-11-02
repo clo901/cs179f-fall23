@@ -29,22 +29,50 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+int handle_page_fault(struct proc* p, uint64 addr)
+{ 
+  if (addr >= p->sz)
+        {       
+                return -1;
+        }
+  
+  uint64 page_addr = PGROUNDDOWN(addr);
+  char *mem = kalloc();
+ 
+ if (mem == 0)   
+        {        
+                 return -1;
+        }
+  
+  memset(mem, 0, PGSIZE);
+ 
+ if(mappages(p->pagetable, page_addr, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0)
+{   
+    kfree(mem);
+    return -1;
+  }
+
+return 0;
+}
+
+
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
 //
 void
 usertrap(void)
-{
+{ 
   int which_dev = 0;
-
+  
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
-
+  
   // send interrupts and exceptions to kerneltrap(),
   // since we're now in the kernel.
   w_stvec((uint64)kernelvec);
-
+  
   struct proc *p = myproc();
   
   // save user program counter.
@@ -52,36 +80,45 @@ usertrap(void)
   
   if(r_scause() == 8){
     // system call
-
+    
     if(p->killed)
       exit(-1);
-
+    
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
     p->tf->epc += 4;
-
+    
     // an interrupt will change sstatus &c registers,
     // so don't enable until done with those registers.
     intr_on();
-
+    
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+     }
+else if(r_scause() == 13 || r_scause() == 15)
+{       
+        if(handle_page_fault(p, r_stval()) == -1)
+        {       
+                p-> killed = 1;
+        }
+}
+else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
-
+  
   if(p->killed)
     exit(-1);
-
+  
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
-
+  
   usertrapret();
 }
+
 
 //
 // return to user space

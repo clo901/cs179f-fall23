@@ -28,19 +28,23 @@ fileinit(void)
 // Allocate a file structure.
 struct file*
 filealloc(void)
-{
+{ 
   struct file *f;
-
+  
   acquire(&ftable.lock);
-  for(f = ftable.file; f < ftable.file + NFILE; f++){
-    if(f->ref == 0){
+    // for(f = ftable.file; f < ftable.file + NFILE; f++){
+    // if(f->ref == 0){
+      f = bd_malloc(sizeof(struct file));
+      if(f){
+      memset(f, 0, sizeof(struct file));
       f->ref = 1;
       release(&ftable.lock);
       return f;
-    }
-  }
-  release(&ftable.lock);
-  return 0;
+      }
+    // }
+    // }
+     release(&ftable.lock);
+     return 0;
 }
 
 // Increment ref count for file f.

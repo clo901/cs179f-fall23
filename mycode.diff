@@ -37,10 +37,11 @@ index e8dcf17..1f9cb7c 100644
 +// struct file file[NFILE];
  } ftable;
 
- void
+void
 @@ -25,22 +25,26 @@ fileinit(void)
    initlock(&ftable.lock, "ftable");
  }
+
 -// Allocate a file structure.
 +// Allocate a file structure. 
  struct file*
@@ -61,7 +62,6 @@ index e8dcf17..1f9cb7c 100644
        return f;
 -    }
 -  }
-
 -  release(&ftable.lock);
 -  return 0;
 +      }
@@ -100,7 +100,7 @@ index e8dcf17..1f9cb7c 100644
    } else if(f->type == FD_INODE){
      ilock(f->ip);
 @@ -140,6 +148,8 @@ filewrite(struct file *f, uint64 addr, int n)
-if(f->type == FD_PIPE){
+   if(f->type == FD_PIPE){
      ret = pipewrite(f->pipe, addr, n);
    } else if(f->type == FD_DEVICE){
 +    if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)
@@ -120,7 +120,8 @@ index 78351fc..88f6e52 100644
 @@ -23,6 +23,7 @@ static void wakeup1(struct proc *chan);
 
  extern char trampoline[]; // trampoline.S
- +
+
++
  void
  procinit(void)
  {
@@ -159,7 +160,7 @@ index e8bcda9..d365ee0 100644
 +  {
      return -1;
 +  }
- addr = myproc()->sz;
+   addr = myproc()->sz;
 -  if(growproc(n) < 0)
 -    return -1;
 +  myproc()->sz+=n;
@@ -198,7 +199,7 @@ index 51a7805..bd86d27 100644
 +                return -1;
 +       }
 +
- memset(mem, 0, PGSIZE);
++  memset(mem, 0, PGSIZE);
 + 
 + if(mappages(p->pagetable, page_addr, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0)
 +{
@@ -218,6 +219,7 @@ index 51a7805..bd86d27 100644
    } else if((which_dev = devintr()) != 0){
      // ok
 -  } else {
++     }
 +else if(r_scause() == 13 || r_scause() == 15)
 +{
 +       if(handle_page_fault(p, r_stval()) == 1)
@@ -279,7 +281,7 @@ index 2b99c8b..8625154 100644
  // addresses on the stack.
 @@ -177,30 +189,37 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
  void
-uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
+ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
  {
 -  uint64 a, last;
 +  uint64 a;
@@ -299,7 +301,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
      if((pte = walk(pagetable, a, 0)) == 0)
 -      panic("uvmunmap: walk");
 +    {
-  continue;
++       continue;
 +    }
 +
      if((*pte & PTE_V) == 0){
@@ -317,7 +319,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
      }
 -    *pte = 0;
 -    if(a == last)
-break;
+-      break;
 -    a += PGSIZE;
 -    pa += PGSIZE;
 +    
@@ -358,7 +360,7 @@ break;
      if(n > len)
 +    {
        n = len;
-       +    }
++    }
 +   
      memmove((void *)(pa0 + (dstva - va0)), src, n);
 -
@@ -420,5 +422,3 @@ index 6b6b063..9f77fab 100644
 +  test1();
    exit(0);
  }
-
-

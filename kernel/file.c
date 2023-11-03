@@ -84,6 +84,7 @@ fileclose(struct file *f)
     iput(ff.ip);
     end_op(ff.ip->dev);
   }
+  bd_free(f);
 }
 
 // Get metadata about file f.
